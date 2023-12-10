@@ -1,0 +1,556 @@
+---
+import StartLayout from "../layouts/StartLayout.astro";
+import { MeiliSearch, type SearchResponse } from "meilisearch";
+import Pagination from "../components/Pagination.astro";
+import Preview from "../components/Preview.astro";
+
+interface FilterJson {
+    client_server?: boolean;
+    server_server?: boolean;
+    application_services?: boolean;
+    e2e?: boolean;
+    kind_core?: boolean;
+    kind_feature?: boolean;
+    kind_maintenance?: boolean;
+    needs_implementation?: boolean;
+    proposal?: boolean;
+    abandoned?: boolean;
+    blocked?: boolean;
+    merged?: boolean;
+    closed?: boolean;
+    other?: boolean;
+    start_opened_date?: number;
+    end_opened_date?: number;
+    start_merged_closed_date?: number;
+    end_merged_closed_date?: number;
+    [key: string]: number | boolean | undefined;
+}
+
+const parsed_url = new URL(Astro.request.url);
+const search_params = parsed_url.searchParams;
+const query = search_params.get("q");
+const filter = search_params.get("filter");
+const current_page = search_params.get("page");
+const filter_parsed: FilterJson = JSON.parse(filter || "{}");
+let results: SearchResponse | undefined = undefined;
+if (Astro.request.method === "POST") {
+    try {
+        const data = await Astro.request.formData();
+
+        const entries = Object.fromEntries(data.entries());
+        const filter_json: FilterJson = {};
+        for (const key in entries) {
+            if (entries.hasOwnProperty(key)) {
+                if (entries[key] === "on") {
+                    filter_json[key] = true;
+                } else if (
+                    key === "start-opened-date" ||
+                    key === "end-opened-date" ||
+                    key === "start-merged-closed-date" ||
+                    key === "end-merged-closed-date"
+                ) {
+                    const fixed_key = key.replaceAll("-", "_");
+                    if (entries[key] !== "") {
+                        const milis = Date.parse(entries[key] as string);
+                        filter_json[fixed_key] = milis / 1000;
+                    } else {
+                        filter_json[fixed_key] = undefined;
+                    }
+                }
+            }
+        }
+
+        const searchQuery = data.get("search");
+        const json = JSON.stringify(filter_json);
+        const search_params = new URLSearchParams({
+            q: searchQuery as string,
+            filter: json,
+        });
+        return Astro.redirect(`/results?${search_params.toString()}`);
+    } catch (error) {
+        if (error instanceof Error) {
+            console.error(error.message);
+        }
+    }
+} else {
+    const has_query = search_params.has("q");
+    if (has_query) {
+        const INDEX = import.meta.env.INDEX;
+        const client = new MeiliSearch({
+            host: import.meta.env.MEILI_HOST ?? "http://127.0.0.1:7700",
+            apiKey: import.meta.env.API_KEY,
+            requestConfig: {
+                headers: {
+                    Authorization: `Bearer ${import.meta.env.API_KEY}` ?? "",
+                },
+            },
+        });
+        results = await client.index(INDEX).search(query, {
+            filter: `labels.name = "proposal"`,
+            page: parseInt(current_page ?? "1"),
+        });
+        console.log(results);
+    }
+}
+
+function format_date(time: number | undefined): string | undefined {
+    if (time === undefined || time === null) {
+        return undefined;
+    }
+    const date = new Date(time * 1000);
+    return date.toISOString().split("T")[0];
+}
+---
+
+<StartLayout>
+    <form method="POST">
+        <main>
+            <header>
+                <h1>Matrix Spec Changes</h1>
+                <div id="search">
+                    <input type="search" name="search" value={query} required />
+                    <svg
+                        id="search-icon"
+                        width="24"
+                        height="24"
+                        viewBox="0 0 48 48"
+                        fill="none"
+                        xmlns="http://www.w3.org/2000/svg"
+                    >
+                        <g clip-path="url(#clip0_2_39)">
+                            <path
+                                d="M31 28H29.42L28.86 27.46C30.82 25.18 32 22.22 32 19C32 11.82 26.18 6 19 6C11.82 6 6 11.82 6 19C6 26.18 11.82 32 19 32C22.22 32 25.18 30.82 27.46 28.86L28 29.42V31L38 40.98L40.98 38L31 28ZM19 28C14.02 28 10 23.98 10 19C10 14.02 14.02 10 19 10C23.98 10 28 14.02 28 19C28 23.98 23.98 28 19 28Z"
+                                fill="#334155"></path>
+                        </g>
+                        <defs>
+                            <clipPath id="clip0_2_39">
+                                <rect width="48" height="48" fill="white"
+                                ></rect>
+                            </clipPath>
+                        </defs>
+                    </svg>
+                </div>
+                <input type="submit" hidden />
+            </header>
+            <div id="content">
+                <div id="results">
+                    {results?.hits.map((hit) => (
+                        <Preview
+                            title={hit.title}
+                            author={hit.author}
+                            content={hit.body}
+                            id={hit.number}
+                        />
+                    ))}
+                </div>
+                <aside id="filters">
+                    <div class="filter-section">
+                        <h1>Labels</h1>
+                        <div class="filter-options">
+                            <div class="filter-wrapper">
+                                <input
+                                    type="checkbox"
+                                    id="client-server"
+                                    name="client-server"
+                                    checked={filter_parsed.client_server}
+                                />
+                                <label for="client-server">Client-Server</label>
+                            </div>
+                            <div class="filter-wrapper">
+                                <input
+                                    type="checkbox"
+                                    id="server-server"
+                                    name="server-server"
+                                    checked={filter_parsed.server_server}
+                                />
+                                <label for="server-server">Server-Server</label>
+                            </div>
+                            <div class="filter-wrapper">
+                                <input
+                                    type="checkbox"
+                                    id="application-services"
+                                    name="application-services"
+                                    checked={filter_parsed.application_services}
+                                />
+                                <label for="application-services"
+                                    >Application Services</label
+                                >
+                            </div>
+                            <div class="filter-wrapper">
+                                <input
+                                    type="checkbox"
+                                    id="e2e"
+                                    name="e2e"
+                                    checked={filter_parsed.e2e}
+                                />
+                                <label for="e2e">E2EE</label>
+                            </div>
+                            <div class="filter-wrapper">
+                                <input
+                                    type="checkbox"
+                                    id="kind:core"
+                                    name="kind:core"
+                                    checked={filter_parsed.kind_core}
+                                />
+                                <label for="kind:core">kind:core</label>
+                            </div>
+                            <div class="filter-wrapper">
+                                <input
+                                    type="checkbox"
+                                    id="kind:feature"
+                                    name="kind:feature"
+                                    checked={filter_parsed.kind_feature}
+                                />
+                                <label for="kind:featurer">kind:feature</label>
+                            </div>
+                            <div class="filter-wrapper">
+                                <input
+                                    type="checkbox"
+                                    id="kind:maintenance"
+                                    name="kind:maintenance"
+                                    checked={filter_parsed.kind_maintenance}
+                                />
+                                <label for="kind:maintenance"
+                                    >kind:maintenance</label
+                                >
+                            </div>
+                            <div class="filter-wrapper">
+                                <input
+                                    type="checkbox"
+                                    id="needs-implementation"
+                                    name="needs-implementation"
+                                    checked={filter_parsed.needs_implementation}
+                                />
+                                <label for="needs-implementation"
+                                    >needs-implementation</label
+                                >
+                            </div>
+                            <div class="filter-wrapper">
+                                <input
+                                    type="checkbox"
+                                    id="proposal"
+                                    name="proposal"
+                                    checked={filter_parsed.proposal}
+                                />
+                                <label for="proposal">proposal</label>
+                            </div>
+                            <div class="filter-wrapper">
+                                <input
+                                    type="checkbox"
+                                    id="abandoned"
+                                    name="abandoned"
+                                    checked={filter_parsed.abandoned}
+                                />
+                                <label for="abandoned">abandoned</label>
+                            </div>
+                            <div class="filter-wrapper">
+                                <input
+                                    type="checkbox"
+                                    id="blocked"
+                                    name="blocked"
+                                    checked={filter_parsed.blocked}
+                                />
+                                <label for="blocked">blocked</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="filter-section">
+                        <h1>State</h1>
+                        <div class="filter-options">
+                            <div class="filter-wrapper">
+                                <input
+                                    type="checkbox"
+                                    id="merged"
+                                    name="merged"
+                                    checked={filter_parsed.merged}
+                                />
+                                <label for="merged">merged</label>
+                            </div>
+                            <div class="filter-wrapper">
+                                <input
+                                    type="checkbox"
+                                    id="closed"
+                                    name="closed"
+                                    checked={filter_parsed.closed}
+                                />
+                                <label for="closed">closed</label>
+                            </div>
+                            <div class="filter-wrapper">
+                                <input
+                                    type="checkbox"
+                                    id="other"
+                                    name="other"
+                                    checked={filter_parsed.other}
+                                />
+                                <label for="other">other</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="filter-section">
+                        <h1>Opened Between</h1>
+                        <div class="filter-options">
+                            <div class="filter-wrapper date">
+                                <label for="start-opened-date">Start</label>
+                                <input
+                                    type="date"
+                                    name="start-opened-date"
+                                    id="start-opened-date"
+                                    value={format_date(
+                                        filter_parsed.start_opened_date,
+                                    )}
+                                />
+                            </div>
+                            <div class="filter-wrapper date">
+                                <label for="end-opened-date">End</label>
+                                <input
+                                    type="date"
+                                    name="end-opened-date"
+                                    id="end-opened-date"
+                                    value={format_date(
+                                        filter_parsed.end_opened_date,
+                                    )}
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="filter-section">
+                        <h1>Merged/closed Between</h1>
+                        <div class="filter-options">
+                            <div class="filter-wrapper date">
+                                <label for="start-merged-closed-date"
+                                    >Start</label
+                                >
+                                <input
+                                    type="date"
+                                    name="start-merged-closed-date"
+                                    id="start-merged-closed-date"
+                                    value={filter_parsed.start_merged_closed_date}
+                                />
+                            </div>
+                            <div class="filter-wrapper date">
+                                <label for="end-merged-closed-date">End</label>
+                                <input
+                                    type="date"
+                                    name="end-merged-closed-date"
+                                    id="end-merged-closed-date"
+                                    value={filter_parsed.end_merged_closed_date}
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    <button type="submit">Apply Filters</button>
+                </aside>
+            </div>
+            <footer>
+                {results ? <span id="infos">Aprox. results: {results.totalHits} ({results.processingTimeMs} ms)</span>:<></>}
+                <Pagination
+                    currentPage={parseInt(current_page ?? "1")}
+                    pages={results?.totalPages ?? 1}
+                />
+            </footer>
+        </main>
+    </form>
+</StartLayout>
+
+<style lang="scss">
+    html,
+    body,
+    form {
+        margin: 0;
+        min-width: 100%;
+        min-height: 100%;
+    }
+
+    body {
+        background: var(--colors-slate-700, #334155);
+    }
+
+    main {
+        display: flex;
+        min-width: 100%;
+        min-height: 100%;
+        padding: var(--spacing-7, 28px) var(--spacing-6, 24px);
+        flex-direction: column;
+        align-items: center;
+        gap: var(--spacing-12, 48px);
+        flex-shrink: 0;
+
+        header {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-12, 48px);
+            align-self: stretch;
+
+            h1 {
+                color: var(--colors-base-white, #fff);
+                text-align: center;
+                font-family: Inter;
+                font-size: 24px;
+                font-style: normal;
+                font-weight: 700;
+                line-height: normal;
+            }
+        }
+
+        #search {
+            width: 730px;
+            height: 50px;
+            display: flex;
+            flex-shrink: 0;
+            border-radius: var(--border-radius-lg, 8px);
+            border: 2px solid var(--colors-slate-400, #94a3b8);
+            background: var(--colors-neutral-100, #f5f5f5);
+
+            /* shadow/lg */
+            box-shadow:
+                0px 4px 6px -2px rgba(0, 0, 0, 0.05),
+                0px 10px 15px -3px rgba(0, 0, 0, 0.1);
+
+            align-items: center;
+
+            input[type="search"] {
+                width: 100%;
+                height: 100%;
+                border-top-left-radius: var(--border-radius-lg, 8px);
+                border-bottom-left-radius: var(--border-radius-lg, 8px);
+                background: var(--colors-neutral-100, #f5f5f5);
+                padding-left: var(--spacing-2, 8px);
+
+                color: #000;
+                font-family: Inter;
+                font-size: 24px;
+                font-style: normal;
+                font-weight: 400;
+                line-height: normal;
+            }
+
+            #search-icon {
+                margin-right: var(--spacing-2, 8px);
+                margin-left: var(--spacing-2, 8px);
+                min-width: 24px;
+                height: 24px;
+                vertical-align: middle;
+            }
+        }
+
+        #content {
+            display: flex;
+            align-items: flex-start;
+            gap: var(--spacing-2, 8px);
+            align-self: stretch;
+            min-height: 100%;
+
+            #results {
+                display: flex;
+                padding: 8px 0px 8px 8px;
+                flex-direction: column;
+                align-items: flex-start;
+                gap: var(--spacing-4, 16px);
+                flex: 1 0 0;
+                min-height: 100%;
+            }
+
+            #filters {
+                display: flex;
+                min-width: 350px;
+                padding: 8px 0px 8px 8px;
+                flex-direction: column;
+                align-items: center;
+                gap: 8px;
+                align-self: stretch;
+                border-left-width: 1px;
+                border-left-color: var(--colors-slate-500, #64748b);
+                min-height: 100%;
+
+                button[type="submit"]:hover {
+                    background: var(--colors-neutral-200, #e5e5e5);
+                }
+                button[type="submit"] {
+                    border-radius: 25px 25px 25px 25px;
+                    background: var(--colors-neutral-100, #f5f5f5);
+                    padding: 8px;
+                }
+
+                .filter-section {
+                    display: flex;
+                    min-width: 100%;
+                    flex-direction: column;
+                    align-items: center;
+                    gap: 8px;
+                    align-self: stretch;
+                    color: var(--colors-base-white, #fff);
+                    font-family: Inter;
+                    font-size: 24px;
+                    font-style: normal;
+                    font-weight: 700;
+                    line-height: normal;
+
+                    .filter-options {
+                        display: flex;
+                        padding: var(--spacing-2, 8px);
+                        flex-direction: column;
+                        align-items: flex-start;
+                        gap: var(--spacing-1, 4px);
+                        align-self: stretch;
+
+                        .filter-wrapper {
+                            color: var(--colors-base-white, #fff);
+                            font-family: Inter;
+                            font-size: 18px;
+                            font-style: normal;
+                            font-weight: 400;
+                            line-height: normal;
+
+                            display: flex;
+                            align-items: center;
+                            gap: 8px;
+                        }
+                        .date {
+                            display: flex;
+                            flex-direction: column;
+                            justify-content: center;
+                            align-items: flex-start;
+                            gap: 8px;
+                            align-self: stretch;
+
+                            input {
+                                background-color: var(
+                                    --colors-slate-700,
+                                    #334155
+                                );
+                                border-radius: var(
+                                    --border-radius-default,
+                                    4px
+                                );
+                                border: 1px solid
+                                    var(--colors-slate-400, #94a3b8);
+                                height: 40px;
+                                min-width: 100%;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        footer {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: var(--spacing-2, 8px);
+            align-self: stretch;
+
+            #infos {
+                color: var(--colors-gray-300, #d1d5db);
+                text-align: center;
+                font-family: Inter;
+                font-size: 16px;
+                font-style: normal;
+                font-weight: 400;
+                line-height: normal;
+            }
+        }
+    }
+</style>

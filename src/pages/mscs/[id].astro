@@ -1,0 +1,28 @@
+---
+import { MeiliSearch } from "meilisearch";
+import MSCLayout from "../../layouts/MSCLayout.astro";
+
+export async function getStaticPaths() {
+    const INDEX = import.meta.env.INDEX;
+    const client = new MeiliSearch({
+        host: import.meta.env.MEILI_HOST ?? "http://127.0.0.1:7700",
+        apiKey: import.meta.env.API_KEY,
+        requestConfig: {
+            headers: {
+                Authorization: `Bearer ${import.meta.env.API_KEY}` ?? "",
+            },
+        },
+    });
+    const documents = await client.index(INDEX).getDocuments({ limit: 8000 });
+    const ids = documents.results.map((document) => {
+        return { params: { id: document.number } };
+    });
+    return ids;
+}
+
+const { id } = Astro.params;
+---
+
+<MSCLayout msc_number={id}>
+    <h1>MSC {id}</h1>
+</MSCLayout>

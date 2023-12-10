@@ -1,0 +1,13 @@
+---
+import { html } from "diff2html";
+
+interface Props {
+    diff: string;
+}
+
+const { diff } = Astro.props;
+
+const renderedHTML = html(diff);
+---
+
+<Fragment set:html={renderedHTML} />

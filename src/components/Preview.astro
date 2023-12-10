@@ -1,0 +1,109 @@
+---
+import { marked } from "marked";
+interface Props {
+    title: string;
+    author: string;
+    content: string;
+    id: number;
+}
+
+const { title, author, content, id } = Astro.props;
+const content_split = content.split(/\r?\n/);
+content_split.length = Math.min(content_split.length, 5);
+const content_joined = content_split.join("\n");
+
+const markdown = marked.parse(content_joined, { breaks: true, gfm: true });
+---
+
+<div class="outer-post">
+    <div class="post">
+        <a href={`/mscs/${id}`}>{title}</a>
+        <h2>{author}</h2>
+        <div class="markdown-wrapper">
+            <Fragment set:html={markdown} />
+        </div>
+    </div>
+    <hr />
+</div>
+
+<style lang="scss">
+    .outer-post {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--spacing-2, 8px);
+        align-self: stretch;
+
+        hr {
+            border-color: var(--colors-slate-500, #64748b);
+            width: 100%;
+        }
+    }
+    .post {
+        display: flex;
+        padding: 0px var(--spacing-2, 8px) var(--spacing-2, 8px)
+            var(--spacing-2, 8px);
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+        align-self: stretch;
+
+        a {
+            color: var(--colors-neutral-50, #fafafa);
+            font-family: Inter;
+            font-size: 24px;
+            font-style: normal;
+            font-weight: 500;
+            line-height: normal;
+        }
+
+        a:hover {
+            color: var(--colors-neutral-200, rgb(229 229 229));
+            text-decoration: underline;
+        }
+
+        h2 {
+            color: var(--colors-neutral-50, #fafafa);
+            font-family: Inter;
+            font-size: 16px;
+            font-style: normal;
+            font-weight: 300;
+            line-height: normal;
+        }
+
+        .markdown-wrapper {
+            color: var(--colors-neutral-50, #fafafa);
+            font-family: Inter;
+            font-size: 16px;
+            font-style: normal;
+            font-weight: 400;
+            align-self: stretch;
+        }
+    }
+</style>
+
+<style is:inline>
+    .markdown-wrapper {
+        a {
+            color: var(--colors-amber-200, rgb(253 230 138));
+            text-decoration: none;
+        }
+        a:hover {
+            color: var(--colors-amber-100, rgb(254 243 199));
+            text-decoration: underline;
+        }
+        ul {
+            list-style-type: disc;
+            margin-left: 2em;
+        }
+
+        ol {
+            list-style-type: decimal;
+            margin-left: 2em;
+        }
+
+        hr {
+            width: 0;
+        }
+    }
+</style>
