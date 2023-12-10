@@ -18,7 +18,7 @@
         "@webcomponents/template-shadowroot": "^0.2.1",
         "astro": "^4.0.1",
         "diff2html": "^3.4.45",
-        "instantsearch.js": "^4.61.0",
+        "instantsearch.js": "^4.62.0",
         "lit": "^2.8.0",
         "marked": "^11.0.1",
         "meilisearch": "^0.36.0",
