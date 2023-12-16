@@ -21,8 +21,21 @@ export async function getStaticPaths() {
 }
 
 const { id } = Astro.params;
+const INDEX = import.meta.env.INDEX;
+const client = new MeiliSearch({
+    host: import.meta.env.MEILI_HOST ?? "http://127.0.0.1:7700",
+    apiKey: import.meta.env.API_KEY,
+    requestConfig: {
+        headers: {
+            Authorization: `Bearer ${import.meta.env.API_KEY}` ?? "",
+        },
+    },
+});
+const document = await client.index(INDEX).getDocuments({ limit: 8000 });
+//const document = await client.index(INDEX).getDocument(id);
 ---
 
 <MSCLayout msc_number={id}>
     <h1>MSC {id}</h1>
+    <pre>{JSON.stringify(document, null, 2)}</pre>
 </MSCLayout>

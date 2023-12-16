@@ -17,14 +17,20 @@ interface FilterJson {
     proposal?: boolean;
     abandoned?: boolean;
     blocked?: boolean;
-    merged?: boolean;
-    closed?: boolean;
-    other?: boolean;
+    state?: {
+        merged?: boolean;
+        closed?: boolean;
+        other?: boolean;
+    };
     start_opened_date?: number;
     end_opened_date?: number;
     start_merged_closed_date?: number;
     end_merged_closed_date?: number;
-    [key: string]: number | boolean | undefined;
+    [key: string]: number | boolean | {
+        merged?: boolean;
+        closed?: boolean;
+        other?: boolean;
+    } | undefined;
 }
 
 const parsed_url = new URL(Astro.request.url);
@@ -43,7 +49,14 @@ if (Astro.request.method === "POST") {
         for (const key in entries) {
             if (entries.hasOwnProperty(key)) {
                 if (entries[key] === "on") {
-                    filter_json[key] = true;
+                     if (key === "merged" || key === "closed" || key === "other") {
+                        filter_json["state"] = {
+                            ...filter_json["state"],
+                            [key]: true,
+                        };
+                    } else{
+                        filter_json[key] = true;
+                    }
                 } else if (
                     key === "start-opened-date" ||
                     key === "end-opened-date" ||
@@ -87,7 +100,7 @@ if (Astro.request.method === "POST") {
             },
         });
         results = await client.index(INDEX).search(query, {
-            filter: `labels.name = "proposal"`,
+            filter: filter_to_string(filter_parsed),
             page: parseInt(current_page ?? "1"),
         });
         console.log(results);
@@ -101,6 +114,116 @@ function format_date(time: number | undefined): string | undefined {
     const date = new Date(time * 1000);
     return date.toISOString().split("T")[0];
 }
+
+/** This function converts the filter json to a meilisearch filter string
+ * We must make sure to not have a stray AND at the end.
+ * If we compare labels we need to have an OR relation between them.
+ * If we check state we need to check if it is merged, closed or other by comapring the state field to the string in uppercase.
+ * Other means that it is not merged or closed.
+ * It also can never be AND for a state as it can only be either merged, closed or other.
+ *
+ *
+ * @param filter The filter json
+ * @returns The filter string
+ * @example
+ * Example:
+ * 
+ * ```json
+ * {
+ *   client_server: true,
+ *   server_server: true,
+ *   state: {
+ *     merged: true,
+ *     closed: true,
+ *   }
+ * }
+ * ```
+ * 
+ * should be converted to
+ * 
+ * ```text
+ * (labels.name = "client_server" OR labels.name = "server_server") AND (state = "MERGED" OR state = "CLOSED")
+ * ```
+*/
+
+function filter_to_string(filter: FilterJson): string {
+    let filter_string = "";
+
+    // Copy the filter to not mutate the original
+   const filter_copy = { ...filter };
+    
+    // Split the state filter from the rest
+    const state_filter = filter_copy.state;
+    delete filter_copy.state;
+
+    // Convert the state filter to a string
+    if (state_filter !== undefined) {
+        if (state_filter.merged) {
+            filter_string += `(state = "MERGED"`;
+        }
+        if (state_filter.closed) {
+            if (filter_string === "") {
+                filter_string += `(state = "CLOSED"`;
+            } else {
+                filter_string += ` OR state = "CLOSED"`;
+            }
+        }
+        if (state_filter.other) {
+            if (filter_string === "") {
+                filter_string += `((state != "MERGED" AND state != "CLOSED")`;
+            } else {
+                filter_string += ` OR (state != "MERGED" AND state != "CLOSED")`;
+            }
+        }
+        // Close the state filter
+        if (filter_string !== "") {
+            filter_string += ")";
+        }
+    }
+
+    // Split the date filters from the rest
+    const start_opened_date = filter_copy.start_opened_date;
+    const end_opened_date = filter_copy.end_opened_date;
+    const start_merged_closed_date = filter_copy.start_merged_closed_date;
+    const end_merged_closed_date = filter_copy.end_merged_closed_date;
+    delete filter_copy.start_opened_date;
+    delete filter_copy.end_opened_date;
+    delete filter_copy.start_merged_closed_date;
+    delete filter_copy.end_merged_closed_date;
+
+    // Convert the rest of the filter to a string
+    let label_filter = "(";
+    for (const key in filter_copy) {
+        if (filter.hasOwnProperty(key)) {
+            const value = filter[key];
+            if (value === undefined) {
+                continue;
+            }
+            if (typeof value === "boolean") {
+                if (value) {
+                    // Add filter but make sure we don't have a stray OR at the end
+                    if (label_filter === "(") {
+                        label_filter += `labels.name = "${key}"`;
+                    } else {
+                        label_filter += ` OR labels.name = "${key}"`;
+                    }
+                }
+            }
+        }
+    }
+    // Close the label filter
+    if (label_filter !== "") {
+        label_filter += ")";
+    }
+    if (filter_string !== "" && label_filter !== "()") {
+        filter_string += ` AND ${label_filter}`;
+    } else if (filter_string === "" && label_filter !== "()") {
+        filter_string += label_filter;
+    }
+
+    console.log(filter_string)
+    return filter_string;
+}
 ---
 
 <StartLayout>
@@ -110,29 +233,29 @@ function format_date(time: number | undefined): string | undefined {
                 <h1>Matrix Spec Changes</h1>
                 <div id="search">
                     <input type="search" name="search" aria-label="Search" value={query} required />
-                    <svg
-                        id="search-icon"
-                        width="24"
-                        height="24"
-                        viewBox="0 0 48 48"
-                        fill="none"
-                        aria-label="Search"
-                        xmlns="http://www.w3.org/2000/svg"
-                    >
-                        <g clip-path="url(#clip0_2_39)">
-                            <path
-                                d="M31 28H29.42L28.86 27.46C30.82 25.18 32 22.22 32 19C32 11.82 26.18 6 19 6C11.82 6 6 11.82 6 19C6 26.18 11.82 32 19 32C22.22 32 25.18 30.82 27.46 28.86L28 29.42V31L38 40.98L40.98 38L31 28ZM19 28C14.02 28 10 23.98 10 19C10 14.02 14.02 10 19 10C23.98 10 28 14.02 28 19C28 23.98 23.98 28 19 28Z"
-                                fill="#334155"></path>
-                        </g>
-                        <defs>
-                            <clipPath id="clip0_2_39">
-                                <rect width="48" height="48" fill="white"
-                                ></rect>
-                            </clipPath>
-                        </defs>
-                    </svg>
+                    <button type="submit" >
+                        <svg id="search-icon"
+                            width="24"
+                            height="24"
+                            viewBox="0 0 48 48"
+                            fill="none"
+                            aria-label="Search"
+                            xmlns="http://www.w3.org/2000/svg"
+                        >
+                            <g clip-path="url(#clip0_2_39)">
+                                <path
+                                    d="M31 28H29.42L28.86 27.46C30.82 25.18 32 22.22 32 19C32 11.82 26.18 6 19 6C11.82 6 6 11.82 6 19C6 26.18 11.82 32 19 32C22.22 32 25.18 30.82 27.46 28.86L28 29.42V31L38 40.98L40.98 38L31 28ZM19 28C14.02 28 10 23.98 10 19C10 14.02 14.02 10 19 10C23.98 10 28 14.02 28 19C28 23.98 23.98 28 19 28Z"
+                                    fill="#334155"></path>
+                            </g>
+                            <defs>
+                                <clipPath id="clip0_2_39">
+                                    <rect width="48" height="48" fill="white"
+                                    ></rect>
+                                </clipPath>
+                            </defs>
+                        </svg>
+                    </button>
                 </div>
-                <input type="submit" hidden />
             </header>
             <div id="content">
                 <div id="results">
@@ -149,14 +272,14 @@ function format_date(time: number | undefined): string | undefined {
                     <div class="filter-section">
                         <h1>Labels</h1>
                         <div class="filter-options">
-                            <Checkbox name="client-server" label="Client-Server" checked={filter_parsed.client_server} />
-                            <Checkbox name="server-server" label="Server-Server" checked={filter_parsed.server_server} />
-                            <Checkbox name="application-services" label="Application Services" checked={filter_parsed.application_services} />
+                            <Checkbox name="client_server" label="Client-Server" checked={filter_parsed.client_server} />
+                            <Checkbox name="server_server" label="Server-Server" checked={filter_parsed.server_server} />
+                            <Checkbox name="application_services" label="Application Services" checked={filter_parsed.application_services} />
                             <Checkbox name="e2e" label="E2EE" checked={filter_parsed.e2e} />
-                            <Checkbox name="kind:core" label="kind:core" checked={filter_parsed.kind_core} />
-                            <Checkbox name="kind:feature" label="kind:feature" checked={filter_parsed.kind_feature} />
-                            <Checkbox name="kind:maintenance" label="kind:maintenance" checked={filter_parsed.kind_maintenance} />
-                            <Checkbox name="needs-implementation" label="needs-implementation" checked={filter_parsed.needs_implementation} />
+                            <Checkbox name="kind_core" label="kind:core" checked={filter_parsed.kind_core} />
+                            <Checkbox name="kind_feature" label="kind:feature" checked={filter_parsed.kind_feature} />
+                            <Checkbox name="kind_maintenance" label="kind:maintenance" checked={filter_parsed.kind_maintenance} />
+                            <Checkbox name="needs_implementation" label="needs-implementation" checked={filter_parsed.needs_implementation} />
                             <Checkbox name="proposal" label="proposal" checked={filter_parsed.proposal} />
                             <Checkbox name="abandoned" label="abandoned" checked={filter_parsed.abandoned} />
                             <Checkbox name="blocked" label="blocked" checked={filter_parsed.blocked} />
@@ -165,9 +288,9 @@ function format_date(time: number | undefined): string | undefined {
                     <div class="filter-section">
                         <h1>State</h1>
                         <div class="filter-options">
-                            <Checkbox name="merged" label="merged" checked={filter_parsed.merged} />
-                            <Checkbox name="closed" label="closed" checked={filter_parsed.closed} />
-                            <Checkbox name="other" label="other" checked={filter_parsed.other} />
+                            <Checkbox name="merged" label="merged" checked={filter_parsed.state?.merged} />
+                            <Checkbox name="closed" label="closed" checked={filter_parsed.state?.closed} />
+                            <Checkbox name="other" label="other" checked={filter_parsed.state?.other} />
                         </div>
                     </div>
 

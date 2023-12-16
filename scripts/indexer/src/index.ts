@@ -203,7 +203,8 @@ for await (const response of prIterator) {
     const nodes = resp.repository.pullRequests.nodes;
     prs += nodes.length;
     console.log(`${prs} prs found.`);
-    await client.index(INDEX).addDocuments(await Promise.all(nodes.map(async (node: any): Promise<Document> => {
+
+    const documents = await Promise.allSettled(nodes.map(async (node: any): Promise<Document> => {
         const author = node.author ? node.author.login : "unknown author";
         const closedAt = dateToTimestamp(new Date(node.closedAt));
         const createdAt = dateToTimestamp(new Date(node.createdAt));
@@ -212,6 +213,7 @@ for await (const response of prIterator) {
 
         const { threads, comments } = await get_comments(node.number);
         const labels = await get_labels(node.number);
+        console.log(`PR ${node.number} has ${labels.length} labels.`);
         return {
             uid: node.number,
             author: author,
@@ -230,15 +232,17 @@ for await (const response of prIterator) {
             comments: comments,
             labels: labels
         }
-    })));
+    }));
+    await client.index(INDEX).addDocuments(documents);
 
 
     lastCursor = resp.repository.pullRequests.pageInfo.endCursor;
     // Dont overload meilisearch
     await wait(5000);
 }
-console.log(`Last Cursor: ${lastCursor}`);
-console.log(`Stats: ${JSON.stringify(await client.getStats()), null, 2}`);
+console.log(`Last Cursor:`, lastCursor);
+const stats = await client.getStats();
+console.log(`Stats:`, JSON.stringify(stats, null, 2));
 
 function dateToTimestamp(date: Date): number {
     return date.getTime() / 1000;
