@@ -1,0 +1,73 @@
+---
+interface Props {
+    name: string;
+    label: string;
+    checked?: boolean;
+}
+
+const { name, label, checked = false } = Astro.props;
+---
+
+<label class="form-control">
+    <input type="checkbox" name={name} checked={checked} />
+    {label}
+</label>
+
+<style lang="scss">
+    input[type="checkbox"] {
+        /* Add if not using autoprefixer */
+        -webkit-appearance: none;
+        appearance: none;
+        /* For iOS < 15 to remove gradient background */
+        background-color: #334155;
+        /* Not removed via appearance */
+        margin: 0;
+        font: inherit;
+        color: #94a3b8;
+        width: 20px;
+        height: 20px;
+        border: 1px solid #94a3b8;
+        border-radius: 4px;
+        transform: translateY(-0.5px);
+
+        display: grid;
+        place-content: center;
+    }
+
+    input[type="checkbox"]::before {
+        content: "";
+        width: 0.65em;
+        height: 0.65em;
+        transform: scale(0);
+        transition: 120ms transform ease-in-out;
+        box-shadow: inset 1em 1em #94a3b8;
+
+        /* Windows High Contrast Mode */
+        background-color: #94a3b8;
+
+        transform-origin: bottom left;
+        clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+    }
+
+    input[type="checkbox"]:checked::before {
+        transform: scale(1);
+    }
+
+    input[type="checkbox"]:focus {
+        outline: max(2px, 0.15em) solid currentColor;
+        outline-offset: max(2px, 0.15em);
+    }
+
+    .form-control {
+        font-size: 18px;
+        font-weight: 400;
+        line-height: normal;
+        display: grid;
+        grid-template-columns: 1em auto;
+        gap: 0.5em;
+    }
+
+    .form-control + .form-control {
+        margin-top: 0.25em;
+    }
+</style>

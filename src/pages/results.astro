@@ -3,6 +3,7 @@ import StartLayout from "../layouts/StartLayout.astro";
 import { MeiliSearch, type SearchResponse } from "meilisearch";
 import Pagination from "../components/Pagination.astro";
 import Preview from "../components/Preview.astro";
+import Checkbox from "../components/Checkbox.astro";
 
 interface FilterJson {
     client_server?: boolean;
@@ -108,13 +109,14 @@ function format_date(time: number | undefined): string | undefined {
             <header>
                 <h1>Matrix Spec Changes</h1>
                 <div id="search">
-                    <input type="search" name="search" value={query} required />
+                    <input type="search" name="search" aria-label="Search" value={query} required />
                     <svg
                         id="search-icon"
                         width="24"
                         height="24"
                         viewBox="0 0 48 48"
                         fill="none"
+                        aria-label="Search"
                         xmlns="http://www.w3.org/2000/svg"
                     >
                         <g clip-path="url(#clip0_2_39)">
@@ -147,143 +149,25 @@ function format_date(time: number | undefined): string | undefined {
                     <div class="filter-section">
                         <h1>Labels</h1>
                         <div class="filter-options">
-                            <div class="filter-wrapper">
-                                <input
-                                    type="checkbox"
-                                    id="client-server"
-                                    name="client-server"
-                                    checked={filter_parsed.client_server}
-                                />
-                                <label for="client-server">Client-Server</label>
-                            </div>
-                            <div class="filter-wrapper">
-                                <input
-                                    type="checkbox"
-                                    id="server-server"
-                                    name="server-server"
-                                    checked={filter_parsed.server_server}
-                                />
-                                <label for="server-server">Server-Server</label>
-                            </div>
-                            <div class="filter-wrapper">
-                                <input
-                                    type="checkbox"
-                                    id="application-services"
-                                    name="application-services"
-                                    checked={filter_parsed.application_services}
-                                />
-                                <label for="application-services"
-                                    >Application Services</label
-                                >
-                            </div>
-                            <div class="filter-wrapper">
-                                <input
-                                    type="checkbox"
-                                    id="e2e"
-                                    name="e2e"
-                                    checked={filter_parsed.e2e}
-                                />
-                                <label for="e2e">E2EE</label>
-                            </div>
-                            <div class="filter-wrapper">
-                                <input
-                                    type="checkbox"
-                                    id="kind:core"
-                                    name="kind:core"
-                                    checked={filter_parsed.kind_core}
-                                />
-                                <label for="kind:core">kind:core</label>
-                            </div>
-                            <div class="filter-wrapper">
-                                <input
-                                    type="checkbox"
-                                    id="kind:feature"
-                                    name="kind:feature"
-                                    checked={filter_parsed.kind_feature}
-                                />
-                                <label for="kind:featurer">kind:feature</label>
-                            </div>
-                            <div class="filter-wrapper">
-                                <input
-                                    type="checkbox"
-                                    id="kind:maintenance"
-                                    name="kind:maintenance"
-                                    checked={filter_parsed.kind_maintenance}
-                                />
-                                <label for="kind:maintenance"
-                                    >kind:maintenance</label
-                                >
-                            </div>
-                            <div class="filter-wrapper">
-                                <input
-                                    type="checkbox"
-                                    id="needs-implementation"
-                                    name="needs-implementation"
-                                    checked={filter_parsed.needs_implementation}
-                                />
-                                <label for="needs-implementation"
-                                    >needs-implementation</label
-                                >
-                            </div>
-                            <div class="filter-wrapper">
-                                <input
-                                    type="checkbox"
-                                    id="proposal"
-                                    name="proposal"
-                                    checked={filter_parsed.proposal}
-                                />
-                                <label for="proposal">proposal</label>
-                            </div>
-                            <div class="filter-wrapper">
-                                <input
-                                    type="checkbox"
-                                    id="abandoned"
-                                    name="abandoned"
-                                    checked={filter_parsed.abandoned}
-                                />
-                                <label for="abandoned">abandoned</label>
-                            </div>
-                            <div class="filter-wrapper">
-                                <input
-                                    type="checkbox"
-                                    id="blocked"
-                                    name="blocked"
-                                    checked={filter_parsed.blocked}
-                                />
-                                <label for="blocked">blocked</label>
-                            </div>
+                            <Checkbox name="client-server" label="Client-Server" checked={filter_parsed.client_server} />
+                            <Checkbox name="server-server" label="Server-Server" checked={filter_parsed.server_server} />
+                            <Checkbox name="application-services" label="Application Services" checked={filter_parsed.application_services} />
+                            <Checkbox name="e2e" label="E2EE" checked={filter_parsed.e2e} />
+                            <Checkbox name="kind:core" label="kind:core" checked={filter_parsed.kind_core} />
+                            <Checkbox name="kind:feature" label="kind:feature" checked={filter_parsed.kind_feature} />
+                            <Checkbox name="kind:maintenance" label="kind:maintenance" checked={filter_parsed.kind_maintenance} />
+                            <Checkbox name="needs-implementation" label="needs-implementation" checked={filter_parsed.needs_implementation} />
+                            <Checkbox name="proposal" label="proposal" checked={filter_parsed.proposal} />
+                            <Checkbox name="abandoned" label="abandoned" checked={filter_parsed.abandoned} />
+                            <Checkbox name="blocked" label="blocked" checked={filter_parsed.blocked} />
                         </div>
                     </div>
                     <div class="filter-section">
                         <h1>State</h1>
                         <div class="filter-options">
-                            <div class="filter-wrapper">
-                                <input
-                                    type="checkbox"
-                                    id="merged"
-                                    name="merged"
-                                    checked={filter_parsed.merged}
-                                />
-                                <label for="merged">merged</label>
-                            </div>
-                            <div class="filter-wrapper">
-                                <input
-                                    type="checkbox"
-                                    id="closed"
-                                    name="closed"
-                                    checked={filter_parsed.closed}
-                                />
-                                <label for="closed">closed</label>
-                            </div>
-                            <div class="filter-wrapper">
-                                <input
-                                    type="checkbox"
-                                    id="other"
-                                    name="other"
-                                    checked={filter_parsed.other}
-                                />
-                                <label for="other">other</label>
-                            </div>
+                            <Checkbox name="merged" label="merged" checked={filter_parsed.merged} />
+                            <Checkbox name="closed" label="closed" checked={filter_parsed.closed} />
+                            <Checkbox name="other" label="other" checked={filter_parsed.other} />
                         </div>
                     </div>
 
