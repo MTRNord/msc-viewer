@@ -275,7 +275,7 @@ function filter_to_string(filter: FilterJson): string {
     <form method="POST">
         <main>
             <header>
-                <h1>Matrix Spec Changes</h1>
+                <a href="/"><h1>Matrix Spec Changes</h1></a>
                 <div id="search">
                     <input type="search" name="search" aria-label="Search" value={query} required />
                     <button type="submit" >
@@ -309,13 +309,13 @@ function filter_to_string(filter: FilterJson): string {
                             title={hit.title}
                             author={hit.author}
                             content={hit.body}
-                            id={hit.number}
+                            id={hit.uid}
                         />
                     ))}
                 </div>
                 <aside id="filters">
                     <div class="filter-section">
-                        <h1>Labels</h1>
+                        <h2>Labels</h2>
                         <div class="filter-options">
                             <Checkbox name="client_server" label="Client-Server" checked={filter_parsed.client_server} />
                             <Checkbox name="server_server" label="Server-Server" checked={filter_parsed.server_server} />
@@ -331,7 +331,7 @@ function filter_to_string(filter: FilterJson): string {
                         </div>
                     </div>
                     <div class="filter-section">
-                        <h1>State</h1>
+                        <h2>State</h2>
                         <div class="filter-options">
                             <Checkbox name="merged" label="Merged" checked={filter_parsed.state?.merged} />
                             <Checkbox name="closed" label="Closed" checked={filter_parsed.state?.closed} />
@@ -340,7 +340,7 @@ function filter_to_string(filter: FilterJson): string {
                     </div>
 
                     <div class="filter-section">
-                        <h1>Opened Between</h1>
+                        <h2>Opened Between</h2>
                         <div class="filter-options">
                             <div class="filter-wrapper date">
                                 <label for="start-opened-date">Start</label>
@@ -368,7 +368,7 @@ function filter_to_string(filter: FilterJson): string {
                     </div>
 
                     <div class="filter-section">
-                        <h1>Merged/closed Between</h1>
+                        <h2>Merged/closed Between</h2>
                         <div class="filter-options">
                             <div class="filter-wrapper date">
                                 <label for="start-merged-closed-date"
@@ -408,27 +408,14 @@ function filter_to_string(filter: FilterJson): string {
 </StartLayout>
 
 <style lang="scss">
-    html,
-    body,
-    form {
-        margin: 0;
-        min-width: 100%;
-        min-height: 100%;
-    }
-
-    body {
-        background: var(--colors-slate-700, #334155);
-    }
-
     main {
         display: flex;
-        min-width: 100%;
-        min-height: 100%;
+        width: 100%;
+        height: 100%;
         padding: var(--spacing-7, 28px) var(--spacing-6, 24px);
         flex-direction: column;
         align-items: center;
         gap: var(--spacing-12, 48px);
-        flex-shrink: 0;
 
         header {
             display: flex;
@@ -439,11 +426,9 @@ function filter_to_string(filter: FilterJson): string {
             h1 {
                 color: var(--colors-base-white, #fff);
                 text-align: center;
-                font-family: Inter;
                 font-size: 24px;
                 font-style: normal;
                 font-weight: 700;
-                line-height: normal;
             }
         }
 
@@ -451,7 +436,6 @@ function filter_to_string(filter: FilterJson): string {
             width: 730px;
             height: 50px;
             display: flex;
-            flex-shrink: 0;
             border-radius: var(--border-radius-lg, 8px);
             border: 2px solid var(--colors-slate-400, #94a3b8);
             background: var(--colors-neutral-100, #f5f5f5);
@@ -472,11 +456,9 @@ function filter_to_string(filter: FilterJson): string {
                 padding-left: var(--spacing-2, 8px);
 
                 color: #000;
-                font-family: Inter;
                 font-size: 24px;
                 font-style: normal;
                 font-weight: 400;
-                line-height: normal;
             }
 
             #search-icon {
@@ -534,11 +516,9 @@ function filter_to_string(filter: FilterJson): string {
                     gap: 8px;
                     align-self: stretch;
                     color: var(--colors-base-white, #fff);
-                    font-family: Inter;
                     font-size: 24px;
                     font-style: normal;
                     font-weight: 700;
-                    line-height: normal;
 
                     .filter-options {
                         display: flex;
@@ -550,11 +530,9 @@ function filter_to_string(filter: FilterJson): string {
 
                         .filter-wrapper {
                             color: var(--colors-base-white, #fff);
-                            font-family: Inter;
                             font-size: 18px;
                             font-style: normal;
                             font-weight: 400;
-                            line-height: normal;
 
                             display: flex;
                             align-items: center;
@@ -597,11 +575,9 @@ function filter_to_string(filter: FilterJson): string {
             #infos {
                 color: var(--colors-gray-300, #d1d5db);
                 text-align: center;
-                font-family: Inter;
                 font-size: 16px;
                 font-style: normal;
                 font-weight: 400;
-                line-height: normal;
             }
         }
     }

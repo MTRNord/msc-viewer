@@ -10,14 +10,13 @@
         "astro": "astro"
     },
     "dependencies": {
-        "@astrojs/check": "^0.3.1",
+        "@astrojs/check": "^0.3.3",
         "@astrojs/lit": "^3.0.3",
-        "@astrojs/node": "^7.0.0",
+        "@astrojs/node": "^7.0.1",
         "@astrojs/tailwind": "^5.0.3",
-        "@meilisearch/instant-meilisearch": "^0.13.6",
         "@webcomponents/template-shadowroot": "^0.2.1",
-        "astro": "^4.0.3",
-        "diff2html": "^3.4.45",
+        "astro": "^4.0.6",
+        "diff2html": "^3.4.46",
         "lit": "^2.8.0",
         "marked": "^11.0.1",
         "meilisearch": "^0.36.0",

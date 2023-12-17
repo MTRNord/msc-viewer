@@ -9,6 +9,7 @@ const INDEX = "MSC_development";
 
 const OWNER = "matrix-org";
 const REPO = "matrix-spec-proposals";
+
 function wait(ms: number) {
     return new Promise(function (resolve, reject) {
         setTimeout(resolve, ms);
@@ -26,8 +27,6 @@ const indexingBar = multibar.create(1, 0, { name: "Indexing" });
 
 interface Comment {
     url: string;
-    pull_request_review_id?: number;
-    id: number;
     diff_hunk: string;
     path: string;
     position?: number;
@@ -42,7 +41,6 @@ interface Comment {
     body: string;
     created_at: string;
     updated_at: string;
-    pull_request_url: string;
     author_association: string;
     _links: {
         self: {
@@ -55,11 +53,6 @@ interface Comment {
             href: string;
         };
     };
-    start_line?: number;
-    start_side?: "LEFT" | "RIGHT";
-    line?: number;
-    side?: string;
-    subject_type?: "line" | "file";
     reactions?: {
         url: string;
         total_count: number;
@@ -86,11 +79,10 @@ interface Document {
     closedAt: number;
     createdAt: number;
     mergedAt: number;
-    number: number;
+    updatedAt: number;
     permalink: string;
     title: string;
     state: string;
-    updatedAt: number;
     threads?: Threads;
     comments?: Comment[];
     labels: { name: string; color: string; }[];
@@ -133,26 +125,32 @@ const octokit = new MyOctokit({
     },
 });
 
-//client.deleteIndex(INDEX)
+await client.deleteIndex(INDEX)
+await client.updateIndex(INDEX, { primaryKey: 'uid' });
+
 await client.index(INDEX).updateDisplayedAttributes([
+    'uid',
     'author',
     'author_url',
     'body',
     "closedAt",
     "createdAt",
     "mergedAt",
-    "number",
+    "updatedAt",
     "permalink",
     "title",
     "state",
-    "updatedAt"
+    "threads",
+    "comments",
+    "labels",
 ]);
 await client.index(INDEX).updateSearchableAttributes([
     "title",
     'author',
     'body',
-    "number",
-    "state"
+    "state",
+    "threads",
+    "comments",
 ]);
 
 const synonyms = {
@@ -168,7 +166,8 @@ await client.index(INDEX).updateFilterableAttributes([
     'createdAt',
     'mergedAt',
     'updatedAt',
-    "labels"])
+    "labels",
+])
 await client.index(INDEX).updateSortableAttributes(['closedAt', 'createdAt', 'mergedAt', 'updatedAt'])
 
 async function wait_for_rate_limit() {
@@ -218,7 +217,6 @@ async function get_documents(): Promise<Document[]> {
                 closedAt: closedAt,
                 createdAt: createdAt,
                 mergedAt: mergedAt,
-                number: node.number,
                 permalink: node.url,
                 title: node.title,
                 state: node.state,
@@ -228,7 +226,6 @@ async function get_documents(): Promise<Document[]> {
         }));
         documents = documents.concat(new_documents.filter((x) => x.status === "fulfilled").map((x) => (x as PromiseFulfilledResult<Document>).value));
         last_added = new_documents.length;
-        prsBar.updateETA();
     }
 
     prsBar.increment(last_added);
@@ -237,11 +234,10 @@ async function get_documents(): Promise<Document[]> {
 
     for (let i = 0; i < documents.length; i++) {
         const document = documents[i];
-        const { threads, comments } = await get_comments(document.number);
+        const { threads, comments } = await get_comments(document.uid);
         document.threads = threads;
         document.comments = comments;
         commentsBar.increment();
-        commentsBar.updateETA();
     }
     return documents;
 }
@@ -276,8 +272,6 @@ async function get_comments(pr_id: number): Promise<{ threads: Threads, comments
         for (const comment of data) {
             const clean_comment: Comment = {
                 url: comment.url,
-                pull_request_review_id: comment.pull_request_review_id ?? undefined,
-                id: comment.id,
                 diff_hunk: comment.diff_hunk,
                 path: comment.path,
                 position: comment.position,
@@ -292,7 +286,6 @@ async function get_comments(pr_id: number): Promise<{ threads: Threads, comments
                 body: comment.body,
                 created_at: comment.created_at,
                 updated_at: comment.updated_at,
-                pull_request_url: comment.pull_request_url,
                 author_association: comment.author_association,
                 _links: {
                     self: {
@@ -305,11 +298,6 @@ async function get_comments(pr_id: number): Promise<{ threads: Threads, comments
                         href: comment._links.pull_request.href,
                     },
                 },
-                start_line: comment.start_line ?? undefined,
-                start_side: comment.start_side ?? undefined,
-                line: comment.line,
-                side: comment.side,
-                subject_type: comment.subject_type,
                 reactions: comment.reactions ? {
                     url: comment.reactions.url,
                     total_count: comment.reactions.total_count,
@@ -340,21 +328,55 @@ async function get_comments(pr_id: number): Promise<{ threads: Threads, comments
     }
 }
 
+/**
+ * We want to wait until the status of the task is either `succeeded` or until
+ * the `error` field has an error. If we got an error we print it and exit.
+ * 
+ * @param taskID The id of a meilisearch task
+ */
+async function waitForTaskToFailOrComplete(taskID: number, pr_number: number): Promise<number | undefined> {
+    const task = await client.getTask(taskID);
+    if (task.status === 'failed') {
+        console.error(`Task failed for PR ${pr_number}:`, JSON.stringify(task, null, 2));
+        //process.exit(1);
+        return pr_number;
+    } else if (task.status === 'succeeded') {
+        return;
+    } else {
+        await wait(1000);
+        await waitForTaskToFailOrComplete(taskID, pr_number);
+    }
+}
+
+/**
+ * We add documents one by one.
+ * 
+ * @param documents The documents to add to the index
+ * @param primaryKey The primary key of the documents
+ */
+async function addDocuments(documents: Document[], primaryKey: string): Promise<number[]> {
+    let errors: number[] = [];
+    for (const document of documents) {
+        const task = await client.index(INDEX).addDocuments([document], { primaryKey });
+        //const error_pr = await waitForTaskToFailOrComplete(task.taskUid, document.number);
+        indexingBar.increment();
+        //if (error_pr) {
+        //    errors.push(error_pr);
+        //}
+    }
+    return errors;
+}
+
 async function main() {
     await wait_for_rate_limit();
     const documents = await get_documents();
 
-    // Add documents in bulks of 1000
-    for (let i = 0; i < documents.length; i += 1000) {
-        const documents_to_add = documents.slice(i, i + 1000);
-        await client.index(INDEX).addDocuments(documents_to_add, { primaryKey: 'uid' });
-        indexingBar.increment(documents_to_add.length);
-        indexingBar.updateETA();
-        // Dont overload meilisearch
-        await wait(5 * 60 * 1000);
-    }
+    const errors = await addDocuments(documents, 'uid');
 
     multibar.stop();
+    if (errors.length > 0) {
+        console.error(`Failed to index the following PRs: ${errors.join(", ")}`);
+    }
     const stats = await client.getStats();
     console.log(`Stats:`, JSON.stringify(stats, null, 2));
 }
