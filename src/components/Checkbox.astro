@@ -3,13 +3,14 @@ interface Props {
     name: string;
     label: string;
     checked?: boolean;
+    disabled?: boolean;
 }
 
-const { name, label, checked = false } = Astro.props;
+const { name, label, checked = false, disabled = false } = Astro.props;
 ---
 
-<label class="form-control">
-    <input type="checkbox" name={name} checked={checked} />
+<label class={disabled ? "form-control--disabled" : "form-control"}>
+    <input type="checkbox" name={name} checked={checked} disabled={disabled} />
     {label}
 </label>
 
@@ -56,6 +57,16 @@ const { name, label, checked = false } = Astro.props;
     input[type="checkbox"]:focus {
         outline: max(2px, 0.15em) solid currentColor;
         outline-offset: max(2px, 0.15em);
+    }
+
+    input[type="checkbox"]:disabled {
+        color: #4b5563;
+        cursor: not-allowed;
+    }
+
+    .form-control--disabled {
+        color: #4b5563;
+        cursor: not-allowed;
     }
 
     .form-control {

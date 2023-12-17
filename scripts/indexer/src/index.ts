@@ -1,9 +1,8 @@
 import { MeiliSearch } from 'meilisearch'
 import { Octokit } from '@octokit/core';
 import { throttling } from '@octokit/plugin-throttling'
-import type { GraphQlQueryResponseData } from "@octokit/graphql";
-import { paginateGraphql } from "@octokit/plugin-paginate-graphql";
 import { paginateRest } from "@octokit/plugin-paginate-rest";
+import { MultiBar, Presets } from 'cli-progress';
 
 //const INDEX = "MSCs";
 const INDEX = "MSC_development";
@@ -15,6 +14,15 @@ function wait(ms: number) {
         setTimeout(resolve, ms);
     });
 }
+
+const multibar = new MultiBar({
+    clearOnComplete: false,
+    hideCursor: true,
+    format: ' {name} {bar} | {percentage} - {value}/{total} - {eta_formatted}',
+}, Presets.shades_classic);
+const prsBar = multibar.create(1, 0, { name: "PRs" });
+const commentsBar = multibar.create(1, 0, { name: "Comments" });
+const indexingBar = multibar.create(1, 0, { name: "Indexing" });
 
 interface Comment {
     url: string;
@@ -73,19 +81,18 @@ interface Threads {
 interface Document {
     uid: number;
     author: string;
+    author_url: string;
     body: string;
-    closed: boolean;
     closedAt: number;
     createdAt: number;
-    merged: boolean;
     mergedAt: number;
     number: number;
     permalink: string;
     title: string;
     state: string;
     updatedAt: number;
-    threads: Threads;
-    comments: Comment[];
+    threads?: Threads;
+    comments?: Comment[];
     labels: { name: string; color: string; }[];
 }
 
@@ -100,71 +107,39 @@ const client = new MeiliSearch({
     }
 })
 
-const MyOctokit = Octokit.plugin(throttling, paginateGraphql, paginateRest);
+const MyOctokit = Octokit.plugin(throttling, paginateRest);
 
 const octokit = new MyOctokit({
     auth: process.env.GIT_SECRET,
     throttle: {
         onRateLimit: (retryAfter, options, octokit, retryCount) => {
-            octokit.log.warn(
+            console.warn(
                 `Request quota exhausted for request ${options.method} ${options.url}`,
             );
 
-            if (retryCount < 25) {
-                // only retries once
-                octokit.log.info(`Retrying after ${retryAfter} seconds!`);
+            if (retryCount <= 5) {
+                // retry 5 times
+                console.info(`Retrying after ${retryAfter} seconds!`);
                 return true;
             }
         },
         onSecondaryRateLimit: (retryAfter, options, octokit) => {
             // does not retry, only logs a warning
-            octokit.log.warn(
+            console.warn(
                 `SecondaryRateLimit detected for request ${options.method} ${options.url}`,
             );
         },
+
     },
 });
 
-const prIterator = await octokit.graphql.paginate.iterator<GraphQlQueryResponseData>(
-    `query paginate($cursor: String) {
-        repository(owner: "matrix-org", name: "matrix-spec-proposals") {
-            pullRequests(first: 100, after: $cursor) {
-                nodes {
-                    author {
-                        login
-                    }
-                    body
-                    closed
-                    closedAt
-                    createdAt
-                    merged
-                    mergedAt
-                    number
-                    permalink
-                    title
-                    state
-                    updatedAt
-                }
-                pageInfo {
-                    hasNextPage
-                    endCursor
-                }
-            }
-        }
-    }`, {
-    cursor: process.env.PREV_CURSOR ?? undefined
-});
-
-let prs = 0;
-let lastCursor = "unknown";
-// client.deleteIndex(INDEX)
+//client.deleteIndex(INDEX)
 await client.index(INDEX).updateDisplayedAttributes([
     'author',
+    'author_url',
     'body',
-    'closed',
     "closedAt",
     "createdAt",
-    "merged",
     "mergedAt",
     "number",
     "permalink",
@@ -189,8 +164,6 @@ await client.index(INDEX).updateSynonyms(synonyms)
 await client.index(INDEX).updateFilterableAttributes([
     'author',
     'state',
-    'merged',
-    'closed',
     'closedAt',
     'createdAt',
     'mergedAt',
@@ -198,66 +171,86 @@ await client.index(INDEX).updateFilterableAttributes([
     "labels"])
 await client.index(INDEX).updateSortableAttributes(['closedAt', 'createdAt', 'mergedAt', 'updatedAt'])
 
-for await (const response of prIterator) {
-    const resp: GraphQlQueryResponseData = response;
-    const nodes = resp.repository.pullRequests.nodes;
-    prs += nodes.length;
-    console.log(`${prs} prs found.`);
-
-    const documents = await Promise.allSettled(nodes.map(async (node: any): Promise<Document> => {
-        const author = node.author ? node.author.login : "unknown author";
-        const closedAt = dateToTimestamp(new Date(node.closedAt));
-        const createdAt = dateToTimestamp(new Date(node.createdAt));
-        const mergedAt = dateToTimestamp(new Date(node.mergedAt));
-        const updatedAt = dateToTimestamp(new Date(node.updatedAt));
-
-        const { threads, comments } = await get_comments(node.number);
-        const labels = await get_labels(node.number);
-        console.log(`PR ${node.number} has ${labels.length} labels.`);
-        return {
-            uid: node.number,
-            author: author,
-            body: node.body,
-            closed: node.closed,
-            closedAt: closedAt,
-            createdAt: createdAt,
-            merged: node.merged,
-            mergedAt: mergedAt,
-            number: node.number,
-            permalink: node.permalink,
-            title: node.title,
-            state: node.state,
-            updatedAt: updatedAt,
-            threads: threads,
-            comments: comments,
-            labels: labels
-        }
-    }));
-    await client.index(INDEX).addDocuments(documents);
-
-
-    lastCursor = resp.repository.pullRequests.pageInfo.endCursor;
-    // Dont overload meilisearch
-    await wait(5000);
+async function wait_for_rate_limit() {
+    // Wait for github to reset the rate limit by fetching the rate limit endpoint and waiting until the reset time
+    const rate_limit = await octokit.request('GET /rate_limit');
+    const reset_time = rate_limit.data.resources.core.reset;
+    const current_time = Math.floor(Date.now() / 1000);
+    const wait_time = reset_time - current_time;
+    multibar.log(`Waiting for ${wait_time} seconds until the rate limit is reset.`)
+    await wait(wait_time * 1000);
 }
-console.log(`Last Cursor:`, lastCursor);
-const stats = await client.getStats();
-console.log(`Stats:`, JSON.stringify(stats, null, 2));
+
+async function get_documents(): Promise<Document[]> {
+    let prs = 0;
+    let documents: Document[] = [];
+    const prIterator = octokit.paginate.iterator(
+        "GET /repos/{owner}/{repo}/pulls",
+        {
+            owner: OWNER,
+            repo: REPO,
+            per_page: 100,
+            state: "all",
+        }
+    );
+
+    let last_added = 0;
+    for await (const response of prIterator) {
+        const nodes = response.data;
+        prs += nodes.length;
+        prsBar.increment(last_added);
+        prsBar.setTotal(prs);
+
+        const new_documents = await Promise.allSettled(nodes.map(async (node: any): Promise<Document> => {
+            const author = node.user ? node.user.login : "unknown author";
+            const author_url = node.user ? node.user.url : undefined;
+            const closedAt = dateToTimestamp(new Date(node.closed_at));
+            const createdAt = dateToTimestamp(new Date(node.created_at));
+            const mergedAt = dateToTimestamp(new Date(node.merged_at));
+            const updatedAt = dateToTimestamp(new Date(node.updated_at));
+
+            const labels = await get_labels(node.labels);
+            return {
+                uid: node.number,
+                author: author,
+                author_url: author_url,
+                body: node.body,
+                closedAt: closedAt,
+                createdAt: createdAt,
+                mergedAt: mergedAt,
+                number: node.number,
+                permalink: node.url,
+                title: node.title,
+                state: node.state,
+                updatedAt: updatedAt,
+                labels: labels
+            }
+        }));
+        documents = documents.concat(new_documents.filter((x) => x.status === "fulfilled").map((x) => (x as PromiseFulfilledResult<Document>).value));
+        last_added = new_documents.length;
+        prsBar.updateETA();
+    }
+
+    prsBar.increment(last_added);
+    commentsBar.setTotal(documents.length);
+    indexingBar.setTotal(documents.length);
+
+    for (let i = 0; i < documents.length; i++) {
+        const document = documents[i];
+        const { threads, comments } = await get_comments(document.number);
+        document.threads = threads;
+        document.comments = comments;
+        commentsBar.increment();
+        commentsBar.updateETA();
+    }
+    return documents;
+}
 
 function dateToTimestamp(date: Date): number {
     return date.getTime() / 1000;
 }
 
-async function get_labels(pr_id: number): Promise<{ name: string; color: string; }[]> {
-    const labels = await octokit.paginate(
-        "GET /repos/{owner}/{repo}/issues/{issue_number}/labels",
-        {
-            owner: OWNER,
-            repo: REPO,
-            issue_number: pr_id,
-            per_page: 100,
-        }
-    );
+async function get_labels(labels: { id: number, node_id: string, url: string, name: string, description: string, color: string, default: boolean }[]): Promise<{ name: string; color: string; }[]> {
     return labels.map((label: any) => {
         return {
             name: label.name,
@@ -339,10 +332,31 @@ async function get_comments(pr_id: number): Promise<{ threads: Threads, comments
                 comments_aggregated.push(clean_comment)
             }
         }
+        await wait(150);
     }
-    console.log(`${Object.keys(threads).length} Threads and ${comments_aggregated.length} free standing comments in PR with number ${pr_id}`)
     return {
         threads: threads,
         comments: comments_aggregated
     }
 }
+
+async function main() {
+    await wait_for_rate_limit();
+    const documents = await get_documents();
+
+    // Add documents in bulks of 1000
+    for (let i = 0; i < documents.length; i += 1000) {
+        const documents_to_add = documents.slice(i, i + 1000);
+        await client.index(INDEX).addDocuments(documents_to_add, { primaryKey: 'uid' });
+        indexingBar.increment(documents_to_add.length);
+        indexingBar.updateETA();
+        // Dont overload meilisearch
+        await wait(5 * 60 * 1000);
+    }
+
+    multibar.stop();
+    const stats = await client.getStats();
+    console.log(`Stats:`, JSON.stringify(stats, null, 2));
+}
+
+await main();

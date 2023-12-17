@@ -191,6 +191,51 @@ function filter_to_string(filter: FilterJson): string {
     delete filter_copy.start_merged_closed_date;
     delete filter_copy.end_merged_closed_date;
 
+    // Convert the date filters to a string
+    let date_filter = "(";
+    if (start_opened_date !== undefined) {
+        if (date_filter === "(") {
+            date_filter += `created_at >= ${start_opened_date}`;
+        } else {
+            date_filter += ` AND created_at >= ${start_opened_date}`;
+        }
+    }
+
+    if (end_opened_date !== undefined) {
+        if (date_filter === "(") {
+            date_filter += `created_at <= ${end_opened_date}`;
+        } else {
+            date_filter += ` AND created_at <= ${end_opened_date}`;
+        }
+    }
+
+    if (start_merged_closed_date !== undefined) {
+        if (date_filter === "(") {
+            date_filter += `(merged_at >= ${start_merged_closed_date} AND merged_at != null) OR (closed_at >= ${start_merged_closed_date} AND closed_at != null)`;
+        } else {
+            date_filter += ` AND (merged_at >= ${start_merged_closed_date} AND merged_at != null) OR (closed_at >= ${start_merged_closed_date} AND closed_at != null)`;
+        }
+    }
+
+    if (end_merged_closed_date !== undefined) {
+        if (date_filter === "(") {
+            date_filter += `(merged_at <= ${end_merged_closed_date} AND merged_at != null) OR (closed_at <= ${end_merged_closed_date} AND closed_at != null)`;
+        } else {
+            date_filter += ` AND (merged_at <= ${end_merged_closed_date} AND merged_at != null) OR (closed_at <= ${end_merged_closed_date} AND closed_at != null)`;
+        }
+    }
+
+    // Close the date filter
+    if (date_filter !== "") {
+        date_filter += ")";
+    }
+
+    if (filter_string !== "" && date_filter !== "()") {
+        filter_string += ` AND ${date_filter}`;
+    } else if (filter_string === "" && date_filter !== "()") {
+        filter_string += date_filter;
+    }
+
     // Convert the rest of the filter to a string
     let label_filter = "(";
     for (const key in filter_copy) {
@@ -276,21 +321,21 @@ function filter_to_string(filter: FilterJson): string {
                             <Checkbox name="server_server" label="Server-Server" checked={filter_parsed.server_server} />
                             <Checkbox name="application_services" label="Application Services" checked={filter_parsed.application_services} />
                             <Checkbox name="e2e" label="E2EE" checked={filter_parsed.e2e} />
-                            <Checkbox name="kind_core" label="kind:core" checked={filter_parsed.kind_core} />
-                            <Checkbox name="kind_feature" label="kind:feature" checked={filter_parsed.kind_feature} />
-                            <Checkbox name="kind_maintenance" label="kind:maintenance" checked={filter_parsed.kind_maintenance} />
-                            <Checkbox name="needs_implementation" label="needs-implementation" checked={filter_parsed.needs_implementation} />
-                            <Checkbox name="proposal" label="proposal" checked={filter_parsed.proposal} />
-                            <Checkbox name="abandoned" label="abandoned" checked={filter_parsed.abandoned} />
-                            <Checkbox name="blocked" label="blocked" checked={filter_parsed.blocked} />
+                            <Checkbox name="kind_core" label="Kind: Core" checked={filter_parsed.kind_core} />
+                            <Checkbox name="kind_feature" label="Kind: Feature" checked={filter_parsed.kind_feature} />
+                            <Checkbox name="kind_maintenance" label="Kind: Maintenance" checked={filter_parsed.kind_maintenance} />
+                            <Checkbox name="needs_implementation" label="Needs Implementation" checked={filter_parsed.needs_implementation} />
+                            <Checkbox name="proposal" label="Proposal" checked={filter_parsed.proposal} />
+                            <Checkbox name="abandoned" label="Abandoned" checked={filter_parsed.abandoned} />
+                            <Checkbox name="blocked" label="Blocked" checked={filter_parsed.blocked} />
                         </div>
                     </div>
                     <div class="filter-section">
                         <h1>State</h1>
                         <div class="filter-options">
-                            <Checkbox name="merged" label="merged" checked={filter_parsed.state?.merged} />
-                            <Checkbox name="closed" label="closed" checked={filter_parsed.state?.closed} />
-                            <Checkbox name="other" label="other" checked={filter_parsed.state?.other} />
+                            <Checkbox name="merged" label="Merged" checked={filter_parsed.state?.merged} />
+                            <Checkbox name="closed" label="Closed" checked={filter_parsed.state?.closed} />
+                            <Checkbox name="other" label="Other" checked={filter_parsed.state?.other} />
                         </div>
                     </div>
 
