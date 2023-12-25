@@ -21,7 +21,7 @@
         "marked": "^11.0.1",
         "meilisearch": "^0.36.0",
         "sass": "^1.69.5",
-        "tailwindcss": "^3.3.6",
+        "tailwindcss": "^3.4.0",
         "typescript": "^5.3.3"
     }
 }
